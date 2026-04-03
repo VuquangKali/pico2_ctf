@@ -1,0 +1,188 @@
+/* Khởi tạo CSS cơ bản */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Roboto', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: #f4f5f8; /* Màu nền xám nhạt */
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* ==================
+   Navbar Styles
+   ================== */
+.navbar {
+    background-color: #555555; /* Màu xám đậm cho navbar */
+    height: 60px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 60px;
+    width: 100%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.nav-brand .logo {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.logo-icon {
+    width: 34px;
+    height: 34px;
+    margin-right: 12px;
+}
+
+.logo-text {
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.nav-links {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 35px;
+}
+
+.nav-links li a {
+    text-decoration: none;
+    color: #ffffff;
+    font-size: 14.5px;
+    font-weight: 500;
+    transition: color 0.2s ease;
+    display: flex;
+    align-items: center;
+}
+
+.nav-links li a:hover {
+    color: #cccccc;
+}
+
+/* ==================
+   Main Content Styles
+   ================== */
+.main-content {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+/* Form Container / Card */
+.login-card {
+    background-color: #ffffff;
+    width: 100%;
+    max-width: 420px;
+    padding: 40px;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05); /* Bóng đổ nhẹ tạo độ nổi */
+}
+
+.card-header {
+    text-align: center;
+    margin-bottom: 35px;
+}
+
+.logo-container-large {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.logo-icon-large {
+    width: 90px;
+    height: 90px;
+    margin-bottom: 15px;
+}
+
+.card-title {
+    color: #ba192c; /* Màu đỏ của logo text trong card */
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* Input Fields */
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.input-group {
+    position: relative;
+    width: 100%;
+}
+
+.input-icon {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #a0a0a0;
+    font-size: 15px;
+}
+
+.form-control {
+    width: 100%;
+    padding: 12px 15px 12px 40px;
+    border: 1px solid #dcdcdc;
+    border-radius: 4px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    color: #333333;
+}
+
+.form-control::placeholder {
+    color: #a9a9a9;
+}
+
+.form-control:focus {
+    border-color: #5d68eb; /* Đường viền xanh khi nhấp vào input */
+}
+
+/* Login Button */
+.btn-login {
+    background-color: #5d68eb; /* Nút màu xanh tím */
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    margin-top: 5px;
+}
+
+.btn-login:hover {
+    background-color: #4b54cc;
+}
+
+/* Footer Links */
+.card-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+}
+
+.footer-link {
+    text-decoration: none;
+    color: #5d68eb;
+    font-size: 14px;
+}
+
+.footer-link:hover {
+    text-decoration: underline;
+}

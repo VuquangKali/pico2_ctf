@@ -1,0 +1,12 @@
+# Ignore executable files and large installers
+*.exe
+
+# Ignore local config files if needed
+# config.php (If you do not want to push database credentials)
+
+# Ignore word/office local files
+*.docx
+
+# OS generated files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,254 @@
+/* Reset và Font chữ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Roboto', sans-serif;
+}
+
+body {
+    background-color: #f4f6f8; /* Màu nền xám nhạt */
+    color: #333;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Navbar */
+.navbar {
+    background-color: #555555; /* Màu xám đậm */
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 40px;
+    height: 60px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.nav-left {
+    display: flex;
+    align-items: center;
+    gap: 30px;
+}
+
+.nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: white;
+}
+
+.logo-icon {
+    width: 32px;
+    height: 32px;
+}
+
+.logo-text {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.nav-links {
+    list-style: none;
+    display: flex;
+    gap: 30px;
+}
+
+.nav-links a {
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 500;
+    opacity: 0.9;
+    transition: opacity 0.2s;
+}
+
+.nav-links a:hover,
+.nav-links a.active {
+    opacity: 1;
+}
+
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.nav-right .icon-link {
+    color: white;
+    text-decoration: none;
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: white;
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+/* Main Content Area */
+.main-content {
+    flex: 1;
+    padding: 40px;
+    display: flex;
+    justify-content: center;
+    position: relative;
+}
+
+/* Container rỗng cho Webshell */
+.container {
+    width: 100%;
+    max-width: 1000px; /* Giới hạn chiều rộng nội dung */
+}
+
+/* Card Classrooms */
+.classroom-card {
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    padding: 30px;
+    margin-top: 20px;
+}
+
+.card-title {
+    font-size: 1.8rem;
+    color: #555;
+    font-weight: 400;
+    margin-bottom: 15px;
+}
+
+.card-subtitle {
+    color: #333;
+    font-size: 1rem;
+    margin-bottom: 25px;
+}
+
+.actions-row {
+    display: flex;
+    justify-content: center;
+    gap: 80px;
+    margin-bottom: 30px;
+}
+
+.action-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #6366f1; /* Màu xanh tím giống thiết kế */
+    text-decoration: none;
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.action-link i {
+    font-size: 1.4rem;
+}
+
+.action-link:hover {
+    text-decoration: underline;
+}
+
+/* Table Style cho Classroom List */
+.classroom-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.classroom-table th {
+    text-align: left;
+    padding: 15px 0;
+    border-bottom: 1px solid #e0e0e0;
+    color: #6c757d;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.classroom-table th:last-child {
+    text-align: right;
+}
+
+.classroom-table td {
+    padding: 30px 0;
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.95rem;
+}
+
+/* Nút Webshell (Fixed right) */
+.webshell-btn {
+    position: fixed;
+    top: 150px;
+    right: 0;
+    background-color: #b0b0b0; /* Màu xám */
+    color: white;
+    padding: 10px 15px 10px 20px;
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+    text-decoration: none;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: -2px 2px 5px rgba(0,0,0,0.1);
+    transition: background-color 0.2s;
+}
+
+.webshell-btn:hover {
+    background-color: #a0a0a0;
+}
+
+/* Footer */
+footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 40px;
+    margin-top: auto;
+}
+
+.footer-links {
+    display: flex;
+    gap: 20px;
+}
+
+.footer-links a {
+    color: #555;
+    text-decoration: none;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.footer-links a:hover {
+    text-decoration: underline;
+}
+
+.footer-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.social-icons {
+    display: flex;
+    gap: 15px;
+}
+
+.social-icons a {
+    color: #000;
+    font-size: 1.5rem;
+    text-decoration: none;
+}
+
+.copyright {
+    color: #555;
+    font-size: 0.85rem;
+}
