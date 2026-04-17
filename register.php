@@ -1,54 +1,76 @@
 <?php
-session_set_cookie_params(['httponly' => true]);
-session_start();
+session_set_cookie_params(['httponly' => true]); // Cấu hình cookie session ở chế độ HTTP Only để thiết lập bảo mật, chống XSS
+session_start(); // Bắt đầu phiên session để được phép lưu trữ và lấy các biến như CSRF token hay thông tin login
 // Gọi file cấu hình kết nối DB PDO
-require 'config.php';
+require 'config.php'; // Nhúng file cấu hình kết nối database vào kịch bản hiện tại cho phép truy vấn DB
+require_once 'mailer.php'; // Nhúng thư viện gửi email
 
 // Khởi tạo CSRF Token nếu chưa có
-if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+if (empty($_SESSION['csrf_token'])) { // Kiểm tra xem biến csrf_token trong session đã được tạo hay chưa
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); // Nếu chưa, tạo một chuỗi ngẫu nhiên 32 byte, mã hóa sang hex và gán vào session làm token
 }
 
 // Logic 1: Khóa cổng màn đăng ký nếu đã vào tài khoản
-if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
-    header("Location: donelogin.php");
-    exit;
+if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) { // Kiểm tra vòng lặp nếu người dùng đã đăng nhập theo session trước đó
+    header("Location: donelogin.php"); // Mặc định chuyển hướng người dùng sang trang donelogin.php để ngăn vào lại trang đăng ký
+    exit; // Dừng kịch bản ngay lập tức tránh cho code dưới được chạy
 }
 
-$error = '';
-$success = '';
+$error = ''; // Khởi tạo biến lưu trữ thông báo lỗi thao tác dưới dạng chuỗi rỗng
+$success = ''; // Khởi tạo biến lưu trữ thông báo nếu có gì đó thành công dưới dạng chuỗi rỗng
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
+if ($_SERVER["REQUEST_METHOD"] == "POST") { // Kiểm tra sự kiện người dùng tải dữ liệu bằng phương thức POST (ấn nút submit)
     // Xác thực CSRF Token
-    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
-        die("Hệ thống phát hiện có dấu hiệu giả mạo request (CSRF).");
+    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) { // Kiểm tra tính hợp lệ của csrf token gửi lên so với trên session
+        die("Hệ thống phát hiện có dấu hiệu giả mạo request (CSRF)."); // Dừng kịch bản ngay lập tức và in thông báo lỗi nếu như token sai
     }
 
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
-    $confirm_password = $_POST['confirm_password'] ?? '';
+    $username = trim($_POST['username'] ?? ''); // Lấy dữ liệu tên người dùng từ POST gửi lên và thực hiện cắt bỏ khoảng trống 2 đầu
+    $email = trim($_POST['email'] ?? ''); // Lấy email người dùng
+    $full_name = trim($_POST['full_name'] ?? ''); // Lấy họ tên người dùng
+    $password = $_POST['password'] ?? ''; // Lấy dữ liệu mật khẩu mà người dung đã nhập từ POST
+    $confirm_password = $_POST['confirm_password'] ?? ''; // Lấy dữ liệu xác nhận mật khẩu từ POST để kiểm chứng lại
 
     // Rà các trường hợp gõ linh tinh:)))
-    if (empty($username) || empty($password)) {
+    if (empty($username) || empty($password) || empty($email) || empty($full_name)) {
         $error = "Vui lòng điền đầy đủ thông tin!";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = "Định dạng email không hợp lệ!";
     } elseif ($password !== $confirm_password) {
         $error = "Mật khẩu nhập lại không khớp!";
+    } elseif (strlen($password) < 8) {
+        $error = "Mật khẩu phải có ít nhất 8 ký tự!";
+    } elseif (!preg_match('/[A-Z]/', $password) || !preg_match('/[a-z]/', $password) || !preg_match('/[0-9]/', $password) || !preg_match('/[@!#%^&*()_+-=$]/', $password)) {
+        $error = "Mật khẩu phải bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (@!#%^&*()_+-=$)!";
     } else {
-        // Kiểm tra xem user này đã tồn tại chưa
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = :username");
-        $stmt->execute(['username' => $username]);
-        if ($stmt->fetch()) {
-            $error = "Tên tài khoản này đã có người sửa dụng!";
+        // Kiểm tra xem user hoặc email này đã tồn tại chưa
+        $stmt = $pdo->prepare("SELECT id, username, email FROM users WHERE username = :username OR email = :email");
+        $stmt->execute(['username' => $username, 'email' => $email]);
+        $existingUser = $stmt->fetch();
+
+        if ($existingUser) {
+            if ($existingUser['username'] === $username) {
+                $error = "Tên tài khoản này đã có người sử dụng!";
+            } else {
+                $error = "Email này đã được sử dụng!";
+            }
         } else {
-            // INSERT dữ liệu an toàn bằng Băm MD5 theo yêu cầu (Mentor approve)
-            $stmt = $pdo->prepare("INSERT INTO users (username, password_hash) VALUES (:username, :password)");
+            // INSERT dữ liệu an toàn bằng BCRYPT
+            $stmt = $pdo->prepare("INSERT INTO users (username, email, password_hash, full_name) VALUES (:username, :email, :password, :full_name)");
             $stmt->execute([
                 'username' => $username,
-                'password' => md5($password)
+                'email' => $email,
+                'password' => password_hash($password, PASSWORD_DEFAULT),
+                'full_name' => $full_name
             ]);
-            // Logic 3: Chuyển thẳng về màn Login báo thành công để xóa form đăng ký 
-            header("Location: login.php?reg=success");
-            exit;
+
+            // Gửi email chào mừng sau khi đăng ký
+            $subject = "Chào mừng con vợ đến với nền tảng PicoCTF!";
+            $body = "<h2>Chào " . htmlspecialchars($username) . ",</h2><p>Đăng ký tài khoản thành công! Cùng bắt đầu thử sức với các thử thách ngay thôi.</p>";
+            sendMail($email, $subject, $body);
+
+            // Cập nhật thông báo thành công và không chuyển hướng
+            $success = "Đăng ký thành công! Vui lòng kiểm tra email của bạn để xem lời chào mừng.";
         }
     }
 }
@@ -68,7 +90,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         .btn-register {
             width: 100%;
             padding: 12px;
-            background-color: #6366f1; /* Đổi màu nút đăng ký cho khác login */
+            background-color: #6366f1;
+            /* Đổi màu nút đăng ký cho khác login */
             color: white;
             border: none;
             border-radius: 4px;
@@ -77,14 +100,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             cursor: pointer;
             margin-top: 10px;
         }
+
         .btn-register:hover {
             background-color: #4f46e5;
         }
+
         .msg-error {
-            color: #b2182b; font-size: 0.95em; margin-bottom: 15px; text-align: center; font-weight: 500;
+            color: #b2182b;
+            font-size: 0.95em;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: 500;
         }
+
         .msg-success {
-            color: #28a745; font-size: 0.95em; margin-bottom: 15px; text-align: center; font-weight: 500;
+            color: #28a745;
+            font-size: 0.95em;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: 500;
         }
     </style>
 </head>
@@ -111,7 +145,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
         <div class="nav-menu">
             <ul class="nav-links">
-                <li><a href="#">Learn <i class="fas fa-caret-down" style="font-size: 0.8em; margin-left: 4px;"></i></a></li>
+                <li><a href="#">Learn <i class="fas fa-caret-down" style="font-size: 0.8em; margin-left: 4px;"></i></a>
+                </li>
                 <li><a href="#">Practice</a></li>
                 <li><a href="#">Compete</a></li>
                 <li><a href="#">Classrooms</a></li>
@@ -142,40 +177,62 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             <form class="login-form" action="register.php" method="POST">
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
-                
-                <div class="input-group">
-                    <i class="far fa-user input-icon"></i>
-                    <input type="text" name="username" placeholder="Tên Đăng Nhập" class="form-control" required value="<?php echo htmlspecialchars($username ?? ''); ?>">
-                </div>
 
-                <div class="input-group">
-                    <i class="fas fa-lock input-icon"></i>
-                    <input type="password" name="password" placeholder="Mật Khẩu" class="form-control" required>
-                </div>
-
-                <div class="input-group">
-                    <i class="fas fa-key input-icon"></i>
-                    <input type="password" name="confirm_password" placeholder="Nhập Lại Mật Khẩu" class="form-control" required>
-                </div>
-
-                <!-- Hiện thông báo PHP nếu có lỗi hoặc thành công -->
-                <?php if ($error): ?>
-                    <div class="msg-error"><i class="fas fa-exclamation-triangle"></i> <?php echo $error; ?></div>
-                <?php endif; ?>
 
                 <?php if ($success): ?>
-                    <div class="msg-success"><i class="fas fa-check-circle"></i> <?php echo $success; ?></div>
+                    <div class="msg-success" style="font-size: 1.2rem; margin-bottom: 20px;"><i
+                            class="fas fa-check-circle"></i> <?php echo $success; ?></div>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <a href="login.php" class="btn-register"
+                            style="display: inline-block; text-decoration: none; padding: 12px 20px; box-sizing: border-box;">Đăng
+                            Nhập Ngay</a>
+                    </div>
+                <?php else: ?>
+                    <div class="input-group">
+                        <i class="far fa-user input-icon"></i>
+                        <input type="text" name="username" placeholder="Tên Đăng Nhập" class="form-control" required
+                            value="<?php echo htmlspecialchars($username ?? ''); ?>">
+                    </div>
+
+                    <div class="input-group">
+                        <i class="far fa-id-card input-icon"></i>
+                        <input type="text" name="full_name" placeholder="Họ và Tên" class="form-control" required
+                            value="<?php echo htmlspecialchars($full_name ?? ''); ?>">
+                    </div>
+
+                    <div class="input-group">
+                        <i class="far fa-envelope input-icon"></i>
+                        <input type="email" name="email" placeholder="Email (ví dụ: name@example.com)" class="form-control"
+                            required value="<?php echo htmlspecialchars($email ?? ''); ?>">
+                    </div>
+
+                    <div class="input-group">
+                        <i class="fas fa-lock input-icon"></i>
+                        <input type="password" name="password" placeholder="Mật Khẩu" class="form-control" required>
+                    </div>
+
+                    <div class="input-group">
+                        <i class="fas fa-key input-icon"></i>
+                        <input type="password" name="confirm_password" placeholder="Nhập Lại Mật Khẩu" class="form-control"
+                            required>
+                    </div>
+
+                    <!-- Hiện thông báo PHP nếu có lỗi -->
+                    <?php if ($error): ?>
+                        <div class="msg-error"><i class="fas fa-exclamation-triangle"></i> <?php echo $error; ?></div>
+                    <?php endif; ?>
+
+                    <button type="submit" class="btn-register">Create Account</button>
+
+                    <div class="card-footer" style="justify-content: center;">
+                        <span style="color: #666; font-size: 0.9em;">Đã có tài khoản? </span>
+                        <a href="login.php" class="footer-link" style="margin-left: 5px;"> Đăng nhập ngay</a>
+                    </div>
                 <?php endif; ?>
-
-                <button type="submit" class="btn-register">Create Account</button>
-
-                <div class="card-footer" style="justify-content: center;">
-                    <span style="color: #666; font-size: 0.9em;">Đã có tài khoản? </span>
-                    <a href="login.php" class="footer-link" style="margin-left: 5px;"> Đăng nhập ngay</a>
-                </div>
             </form>
         </div>
     </main>
 
 </body>
+
 </html>

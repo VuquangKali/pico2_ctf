@@ -5,12 +5,21 @@ CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    full_name VARCHAR(100),
+    phone VARCHAR(20),
+    avatar VARCHAR(255) DEFAULT 'default_avatar.png',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tạo một tài khoản admin mặc định với mật khẩu là 'Admin@123'
--- Lưu ý: Hàm MD5 thường không được khuyên dùng trong thực tế (rủi ro bảo mật)
--- Nhưng để bạn dễ hiệu luồng lập trình chay ở mức cơ bản, chúng ta sẽ bắt đầu với mã băm này.
-INSERT INTO users (username, password_hash)
-VALUES ('admin', md5('Admin@123'))
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    ip_address VARCHAR(45) NOT NULL,
+    attempt_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    KEY (ip_address)
+);
+
+-- Mật khẩu mặc định 'Admin@123' đã được băm bằng BCRYPT thay vì MD5
+INSERT INTO users (username, password_hash, email, full_name)
+VALUES ('admin', '$2y$10$e0MYzXyjpJS7Pd0RVvOxGu6rJ.SNozJvF6J6vF.fF2T6Q0u3.3.0m', 'admin@picoctf.local', 'Pico Administrator')
 ON DUPLICATE KEY UPDATE id=id;

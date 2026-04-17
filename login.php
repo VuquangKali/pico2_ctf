@@ -1,7 +1,8 @@
 <?php
-session_start();
+session_start(); // Khởi động session để bắt đầu phiên làm việc và lưu trữ thông tin trạng thái người dùng
 // Gọi file cấu hình kết nối DB PDO
-require 'config.php';
+require 'config.php'; // Nhúng file config.php vào để sử dụng kết nối cơ sở dữ liệu đã thiết lập sẵn
+require 'mailer.php'; // Nhúng mailer để gửi OTP qua email
 
 // Logic 1: Nếu đã đăng nhập thì vào Dashboard, ko vào trang Login nữa
 if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
@@ -11,15 +12,18 @@ if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
 
 $error = '';
 $success = '';
-$username = ''; // Giữ lại tên để người dùng 
+$username = '';
 
-// Xử lý thông báo chuyển hướng thành công từ Register chạy qua
-if (isset($_GET['reg']) && $_GET['reg'] === 'success') {
-    $success = "Tạo tài khoản thành công! Mời bạn đăng nhập.";
+// Check rate limit
+$ip_address = $_SERVER['REMOTE_ADDR'];
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM login_attempts WHERE ip_address = :ip AND attempt_time > DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
+$stmt->execute(['ip' => $ip_address]);
+if ($stmt->fetchColumn() > 5) {
+    $error = "Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau 2 phút.";
 }
 
 // Xử lý Form 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
+if ($_SERVER["REQUEST_METHOD"] == "POST" && empty($error)) {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
 
@@ -27,14 +31,39 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $stmt->execute(['username' => $username]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($user && $user['password_hash'] === md5($password)) {
-        // Đăng nhập thành công
-        $_SESSION['loggedin'] = true;
-        $_SESSION['username'] = $user['username'];
-        header("Location: donelogin.php");
-        exit;
+    if ($user && password_verify($password, $user['password_hash'])) {
+        // Đăng nhập thành công — bắt đầu luồng MFA
+        // Xóa lịch sử đăng nhập sai của IP này
+        $stmt = $pdo->prepare("DELETE FROM login_attempts WHERE ip_address = :ip");
+        $stmt->execute(['ip' => $ip_address]);
+
+        // Sinh OTP 6 chữ số và lưu vào session tạm
+        $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $_SESSION['mfa_user_id'] = $user['id'];
+        $_SESSION['mfa_code'] = $otp;
+        $_SESSION['mfa_expires'] = date('Y-m-d H:i:s', time() + 300); // Hết hạn sau 5 phút
+
+        // Gửi OTP tới email của user
+        $emailBody = "
+            <div style='font-family:Roboto,sans-serif;max-width:480px;margin:auto;background:#1a1a1a;color:#fff;border-radius:10px;padding:32px;'>
+                <h2 style='color:#b196b6;margin-top:0'>Xác thực đăng nhập picoCTF cho con vợ <strong>" . htmlspecialchars($user['username']) . "</strong>,</h2>
+                <p>Xin chào <strong>" . htmlspecialchars($user['username']) . "</strong>,</p>
+                <p>Mã OTP của bạn là:</p>
+                <div style='font-size:2.5rem;font-weight:700;letter-spacing:12px;color:#5d68eb;text-align:center;padding:20px 0'>$otp</div>
+                <p style='color:#888;font-size:0.85rem'>Mã có hiệu lực trong <strong>5 phút</strong>. Không chia sẻ mã này cho bất kỳ ai.</p>
+            </div>";
+
+        if (!sendMail($user['email'], 'Mã xác thực đăng nhập picoCTF', $emailBody)) {
+            $error = 'Không thể gửi email OTP. Vui lòng thử lại.';
+        } else {
+            header('Location: mfa.php');
+            exit;
+        }
     } else {
-        // Đăng nhập thất bại: gán cảnh báo đỏ
+        // Log failed attempt
+        $stmt = $pdo->prepare("INSERT INTO login_attempts (ip_address) VALUES (:ip)");
+        $stmt->execute(['ip' => $ip_address]);
+
         $error = "Tài khoản hoặc Mật khẩu không chính xác!";
     }
 }
@@ -53,17 +82,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         .msg-error {
-            color: #b2182b; font-size: 0.95em; margin-bottom: 15px; text-align: center; font-weight: 500;
+            color: #b2182b;
+            font-size: 0.95em;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: 500;
         }
+
         .msg-success {
-            color: #28a745; font-size: 0.95em; margin-bottom: 15px; text-align: center; font-weight: 500;
+            color: #28a745;
+            font-size: 0.95em;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: 500;
         }
     </style>
 </head>
 
 <body>
 
-    <!-- Thanh điều hướng:))), --> 
+    <!-- Thanh điều hướng:))), -->
     <nav class="navbar">
         <div class="nav-brand">
             <div class="logo">
@@ -118,11 +156,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             <!-- Ở ĐÂY SỬ DỤNG LUÔN login.php LÀM NƠI ĐIỀU HƯỚNG ACTION SAU POST -->
             <form class="login-form" action="login.php" method="POST">
-                
+
                 <div class="input-group">
                     <i class="far fa-user input-icon"></i>
                     <!-- Biến <?php echo htmlspecialchars($username); ?> giúp NHỚ lại tên đã điền form trước đó -->
-                    <input type="text" name="username" placeholder="Username" class="form-control" value="<?php echo htmlspecialchars($username); ?>" required>
+                    <input type="text" name="username" placeholder="Username" class="form-control"
+                        value="<?php echo htmlspecialchars($username); ?>" required>
                 </div>
 
                 <div class="input-group">
@@ -130,7 +169,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <!-- Mật khẩu rỗng vì dĩ nhiên gõ sai thì phải tự gõ lại mật khẩu cho an toàn -->
                     <input type="password" name="password" placeholder="Password" class="form-control" required>
                 </div>
-                
+
                 <!-- Hiển thị PHP động (T -->
                 <?php if ($error): ?>
                     <div class="msg-error"><i class="fas fa-exclamation-circle"></i> <?php echo $error; ?></div>
@@ -144,7 +183,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 <div class="card-footer">
                     <a href="register.php" class="footer-link">Sign Up</a>
-                    <a href="#" class="footer-link">Forgot Password?</a>
+                    <a href="forgot_password.php" class="footer-link">Forgot Password?</a>
                 </div>
             </form>
         </div>

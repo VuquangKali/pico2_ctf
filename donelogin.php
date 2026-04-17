@@ -1,33 +1,42 @@
 <?php
 // Bắt đầu Session để đọc trí nhớ của server
-session_set_cookie_params(['httponly' => true]);
-session_start();
+session_set_cookie_params(['httponly' => true]); // Cấu hình cookie session với cờ httponly để ngăn chặn truy cập từ JavaScript (chống XSS)
+session_start(); // Bắt đầu session để có thể lấy hoặc lưu trữ dữ liệu người dùng qua các trang
 
 
 // Nếu chưa có thẻ đăng nhập hợp lệ (chưa qua process_login) thì về login!
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
-    header("Location: login.php");
-    exit;
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { // Kiểm tra xem biến session 'loggedin' có tồn tại và mang giá trị true hay không
+    header("Location: login.php"); // Nếu không phải là người dùng đã đăng nhập, chuyển hướng người dùng về trang đăng nhập
+    exit; // Dừng việc tải trang để ngăn người dùng trái phép xem nội dung phía dưới
 }
 
+// Lấy thông tin user (Avatar) từ DB
+require 'config.php';
+$stmt = $pdo->prepare("SELECT avatar FROM users WHERE username = :username");
+$stmt->execute(['username' => $_SESSION['username']]);
+$user_db = $stmt->fetch();
+$avatar_src = ($user_db && $user_db['avatar'] != 'default_avatar.png') ? 'uploads/avatars/' . $user_db['avatar'] : 'default_avatar.png';
+
 // Lấy tên ra biến, dùng hàm htmlspecialchars để chống lỗ hổng XSS bị cài cắm mã độc script
-$cau_chao_ten = htmlspecialchars($_SESSION['username']);
+$cau_chao_ten = htmlspecialchars($_SESSION['username']); // Lấy tên đăng nhập từ session và xử lý các ký tự đặc biệt thành thực thể HTML để chống XSS
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>picoCTF - My Classrooms</title>
-    <!-- Trỏ đến file CSS bạn vừa yêu cầu -->
+    <!-- Trỏ đến file CSS vừa yêu cầu -->
     <link rel="stylesheet" href="doneloginstyle.css">
-    
+
     <!-- Font Awesome dùng cho các icon (Chuông, Mũi tên, Plus, FB...) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <!-- Google Fonts: Roboto -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
+
 <body>
 
     <!-- NAVBAR -->
@@ -58,20 +67,27 @@ $cau_chao_ten = htmlspecialchars($_SESSION['username']);
                 <li><a href="#" class="active">Classrooms</a></li>
             </ul>
         </div>
-        
+
         <div class="nav-right">
             <a href="#" class="icon-link"><i class="far fa-bell"></i></a>
-            
-            <!-- ====== KHU VỰC ĐÃ SỬA THÀNH TÊN ĐỘNG ====== -->
-            <a href="#" class="user-profile">
-                <?php echo $cau_chao_ten; ?> <i class="fas fa-user" style="margin-left: 5px;"></i>
-            </a>
-            
-            <!-- NÚT LOGOUT VỪA ĐƯỢC THÊM VÀO KẾ HOẠCH -->
-            <a href="logout.php" style="color: #ff6b6b; font-size: 0.95em; text-decoration: none; font-weight: 600; margin-left: 20px;">
+
+            <!-- ====== KHU VỰC ĐÃ SỬA THÀNH TÊN ĐỘNG & AVATAR ====== -->
+            <div class="user-menu-container"
+                style="position: relative; display: flex; align-items: center; gap: 10px; margin-left: 15px;">
+                <img src="<?php echo $avatar_src; ?>" alt="Avatar"
+                    style="width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 2px solid #b196b6;">
+                <a href="profile.php" class="user-profile"
+                    style="text-decoration: none; color: #fff; font-weight: 500;">
+                    <?php echo $cau_chao_ten; ?>
+                </a>
+            </div>
+
+
+            <a href="logout.php"
+                style="color: #ff6b6b; font-size: 0.95em; text-decoration: none; font-weight: 600; margin-left: 20px;">
                 <i class="fas fa-sign-out-alt"></i> Thoát
             </a>
-            
+
         </div>
     </nav>
 
@@ -80,8 +96,9 @@ $cau_chao_ten = htmlspecialchars($_SESSION['username']);
         <div class="container">
             <div class="classroom-card">
                 <h1 class="card-title">My Classrooms</h1>
-                <p class="card-subtitle">Join or create a classroom to get custom event scoreboards and track classroom members' progress.</p>
-                
+                <p class="card-subtitle">Join or create a classroom to get custom event scoreboards and track classroom
+                    members' progress.</p>
+
                 <div class="actions-row">
                     <a href="#" class="action-link">
                         <i class="fas fa-sign-in-alt"></i> Join a Classroom
@@ -121,7 +138,7 @@ $cau_chao_ten = htmlspecialchars($_SESSION['username']);
             <a href="#">PRIVACY STATEMENT</a>
             <a href="#">TERMS OF SERVICE</a>
         </div>
-        
+
         <div class="footer-right">
             <div class="social-icons">
                 <a href="#"><i class="fab fa-facebook-square"></i></a>
@@ -133,4 +150,5 @@ $cau_chao_ten = htmlspecialchars($_SESSION['username']);
     </footer>
 
 </body>
+
 </html>
