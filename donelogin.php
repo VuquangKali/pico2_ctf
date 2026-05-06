@@ -12,13 +12,27 @@ if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { // Kiểm
 
 // Lấy thông tin user (Avatar) từ DB
 require 'config.php';
-$stmt = $pdo->prepare("SELECT avatar FROM users WHERE username = :username");
+$stmt = $pdo->prepare("SELECT avatar, role FROM users WHERE username = :username");
 $stmt->execute(['username' => $_SESSION['username']]);
 $user_db = $stmt->fetch();
 $avatar_src = ($user_db && $user_db['avatar'] != 'default_avatar.png') ? 'uploads/avatars/' . $user_db['avatar'] : 'default_avatar.png';
 
 // Lấy tên ra biến, dùng hàm htmlspecialchars để chống lỗ hổng XSS bị cài cắm mã độc script
 $cau_chao_ten = htmlspecialchars($_SESSION['username']); // Lấy tên đăng nhập từ session và xử lý các ký tự đặc biệt thành thực thể HTML để chống XSS
+
+$bg_image = '';
+$extensions = ['jpg', 'png', 'gif', 'jpeg'];
+foreach ($extensions as $ext) {
+    if (file_exists("uploads/bg.$ext")) {
+        $bg_image = "uploads/bg.$ext?" . time();
+        break;
+    }
+}
+
+$bg_style = 'cover';
+if (file_exists('uploads/bg_style.txt')) {
+    $bg_style = file_get_contents('uploads/bg_style.txt');
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -35,6 +49,17 @@ $cau_chao_ten = htmlspecialchars($_SESSION['username']); // Lấy tên đăng nh
 
     <!-- Google Fonts: Roboto -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        <?php if ($bg_image): ?>
+        body {
+            background-image: url('<?php echo $bg_image; ?>') !important;
+            background-size: <?php echo $bg_style; ?> !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            background-attachment: fixed !important;
+        }
+        <?php endif; ?>
+    </style>
 </head>
 
 <body>
@@ -59,12 +84,12 @@ $cau_chao_ten = htmlspecialchars($_SESSION['username']); // Lấy tên đăng nh
                 <span class="logo-text">picoCTF</span>
             </a>
             <ul class="nav-links">
-                <li>
-                    <a href="#">Learn <i class="fas fa-caret-down" style="font-size: 0.8em; margin-left: 2px;"></i></a>
-                </li>
-                <li><a href="#">Practice</a></li>
-                <li><a href="#">Compete</a></li>
-                <li><a href="#" class="active">Classrooms</a></li>
+                <?php if (($user_db['role'] ?? 'user') === 'admin'): ?>
+                <li><a href="admin.php?tab=challenge"><i class="fas fa-flag"></i> Quản lý bài CTF</a></li>
+                <li><a href="admin.php?tab=category"><i class="fas fa-list"></i> Quản lý danh mục</a></li>
+                <li><a href="admin.php?tab=participants"><i class="fas fa-users"></i> Người tham gia</a></li>
+                <li><a href="upload_bg.php"><i class="fas fa-image"></i> Tải ảnh nền</a></li>
+                <?php endif; ?>
             </ul>
         </div>
 
@@ -92,43 +117,26 @@ $cau_chao_ten = htmlspecialchars($_SESSION['username']); // Lấy tên đăng nh
     </nav>
 
     <!-- MAIN CONTENT -->
-    <main class="main-content">
-        <div class="container">
-            <div class="classroom-card">
-                <h1 class="card-title">My Classrooms</h1>
-                <p class="card-subtitle">Join or create a classroom to get custom event scoreboards and track classroom
-                    members' progress.</p>
-
-                <div class="actions-row">
-                    <a href="#" class="action-link">
-                        <i class="fas fa-sign-in-alt"></i> Join a Classroom
-                    </a>
-                    <a href="#" class="action-link">
-                        <i class="fas fa-plus-circle"></i> Create New Classroom
-                    </a>
-                </div>
-
-                <table class="classroom-table">
-                    <thead>
-                        <tr>
-                            <th>CLASSROOM NAME</th>
-                            <th style="text-align: center;">STATUS</th>
-                            <th style="text-align: right;">ACTIONS</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td colspan="3" style="text-align: center;">You are not a member of any classrooms.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+    <main class="main-content" style="display: flex; align-items: center; justify-content: center;">
+        <div class="container" style="text-align: center;">
+            <a href="dashboard.php" style="
+                display: inline-flex; 
+                align-items: center; 
+                background-color: #b2182b; 
+                color: white; 
+                padding: 20px 50px; 
+                font-size: 1.8rem; 
+                font-weight: bold; 
+                border-radius: 50px; 
+                text-decoration: none; 
+                box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+                transition: transform 0.2s, background-color 0.2s;
+                text-transform: uppercase;
+                letter-spacing: 2px;
+            " onmouseover="this.style.transform='scale(1.05)'; this.style.backgroundColor='#8a1321';" onmouseout="this.style.transform='scale(1)'; this.style.backgroundColor='#b2182b';">
+                <i class="fas fa-play" style="margin-right: 15px;"></i> Bắt Đầu Giải CTF
+            </a>
         </div>
-
-        <!-- NÚT WEBSHELL CỐ ĐỊNH -->
-        <a href="#" class="webshell-btn">
-            >_ Webshell
-        </a>
     </main>
 
     <!-- FOOTER -->

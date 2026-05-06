@@ -9,13 +9,13 @@ if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
     exit;
 }
 
-$step   = $_SESSION['fp_step'] ?? 1;  // 1=nhập email, 2=nhập OTP, 3=đặt mật khẩu mới
+$step   = $_SESSION['fp_step'] ?? 1;  // 1=nhập email, 2=nhập OTP, 3=đặt mật khẩu mới:VV
 $error  = '';
 $success = '';
 
-// ==============================
+
 // Bước 1: Nhập email
-// ==============================
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'send_otp') {
     $email = trim($_POST['email'] ?? '');
 
@@ -31,13 +31,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             // Trả về thông báo giống như thành công để tránh user enumeration
             $success = 'Nếu email tồn tại, mã OTP đã được gửi. Vui lòng kiểm tra hộp thư.';
         } else {
-            // Sinh OTP 6 số
-            $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-            $_SESSION['fp_user_id'] = $user['id'];
-            $_SESSION['fp_email']   = $email;
-            $_SESSION['fp_otp']     = $otp;
-            $_SESSION['fp_expires'] = time() + 300; // Hết hạn sau 5 phút
-            $_SESSION['fp_step']    = 2;
+            // Rate limit OTP
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM otp_attempts WHERE identifier = :email AND attempt_time > DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
+            $stmt->execute(['email' => $email]);
+            if ($stmt->fetchColumn() >= 3) {
+                $error = 'Bạn đã yêu cầu gửi OTP quá nhiều lần. Vui lòng thử lại sau 2 phút.';
+                $_SESSION['fp_step'] = 1;
+            } else {
+                $stmt = $pdo->prepare("INSERT INTO otp_attempts (identifier) VALUES (:email)");
+                $stmt->execute(['email' => $email]);
+
+                // Sinh OTP 8 ký tự
+                $otp = generateStrongOTP();
+                $_SESSION['fp_user_id'] = $user['id'];
+                $_SESSION['fp_email']   = $email;
+                $_SESSION['fp_otp']     = $otp;
+                $_SESSION['fp_expires'] = time() + 300; // Hết hạn sau 5 phút
+                $_SESSION['fp_step']    = 2;
 
             $emailBody = "
                 <div style='font-family:Roboto,sans-serif;max-width:480px;margin:auto;background:#1a1a1a;color:#fff;border-radius:10px;padding:32px;'>
@@ -54,17 +64,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             } else {
                 $step = 2;
             }
+            } // End of rate limit check
         }
     }
 }
 
-// ==============================
+
 // Bước 2: Xác thực OTP
-// ==============================
+
 elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'verify_otp') {
     $entered_otp = trim($_POST['otp'] ?? '');
 
-    if (empty($_SESSION['fp_otp']) || empty($_SESSION['fp_expires'])) {
+    if (isset($_SESSION['fp_lockout']) && $_SESSION['fp_lockout'] > time()) {
+        $error = 'Bạn đã nhập sai quá 5 lần. Vui lòng chờ 2 phút để thử lại.';
+        $step = 2;
+    } elseif (empty($_SESSION['fp_otp']) || empty($_SESSION['fp_expires'])) {
         $error = 'Phiên xác thực hết hạn. Vui lòng thử lại.';
         $_SESSION['fp_step'] = 1;
         $step = 1;
@@ -74,20 +88,27 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_PO
         $_SESSION['fp_step'] = 1;
         $step = 1;
     } elseif ($entered_otp !== $_SESSION['fp_otp']) {
-        $error = 'Mã OTP không đúng. Vui lòng kiểm tra lại.';
+        if (!isset($_SESSION['fp_failures'])) $_SESSION['fp_failures'] = 0;
+        $_SESSION['fp_failures']++;
+        if ($_SESSION['fp_failures'] >= 5) {
+            $_SESSION['fp_lockout'] = time() + 120;
+            $error = 'Bạn đã nhập sai quá 5 lần. Vui lòng chờ 2 phút để thử lại.';
+        } else {
+            $error = 'Mã OTP không đúng. Vui lòng kiểm tra lại.';
+        }
         $step = 2;
     } else {
         // OTP đúng → bước 3
-        unset($_SESSION['fp_otp']); // Xóa OTP ngay sau khi dùng
+        unset($_SESSION['fp_otp'], $_SESSION['fp_failures'], $_SESSION['fp_lockout']); // Xóa OTP ngay sau khi dùng
         $_SESSION['fp_verified'] = true;
         $_SESSION['fp_step']     = 3;
         $step = 3;
     }
 }
 
-// ==============================
+
 // Bước 3: Đặt mật khẩu mới
-// ==============================
+
 elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reset_password') {
     if (empty($_SESSION['fp_verified']) || empty($_SESSION['fp_user_id'])) {
         $error = 'Phiên không hợp lệ. Vui lòng bắt đầu lại.';
@@ -265,8 +286,8 @@ $step = $_SESSION['fp_step'] ?? $step;
                     <input type="hidden" name="action" value="verify_otp">
                     <div class="input-group">
                         <i class="fas fa-key input-icon"></i>
-                        <input type="text" name="otp" placeholder="Mã 6 chữ số" class="form-control"
-                               maxlength="6" pattern="\d{6}" inputmode="numeric" autocomplete="one-time-code" required>
+                        <input type="text" name="otp" placeholder="Mã 8 ký tự" class="form-control"
+                               maxlength="8" autocomplete="one-time-code" required>
                     </div>
                     <p class="otp-hint">Mã có hiệu lực trong 5 phút.</p>
                     <button type="submit" class="btn-login">Xác nhận OTP</button>

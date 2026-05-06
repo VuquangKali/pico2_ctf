@@ -15,25 +15,36 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['otp'])) {
     $code = trim($_POST['otp'] ?? '');
 
-    if (empty($_SESSION['mfa_code']) || empty($_SESSION['mfa_expires'])) {
+    if (isset($_SESSION['mfa_lockout']) && $_SESSION['mfa_lockout'] > time()) {
+        $error = 'Bạn đã nhập sai quá 5 lần. Vui lòng chờ 2 phút để thử lại.';
+    } elseif (empty($_SESSION['mfa_code']) || empty($_SESSION['mfa_expires'])) {
         $error = 'Phiên xác thực không hợp lệ. Vui lòng đăng nhập lại.';
     } elseif (strtotime($_SESSION['mfa_expires']) < time()) {
         $error = 'Mã OTP đã hết hạn. Vui lòng đăng nhập lại để nhận mã mới.';
         // Xóa session MFA để buộc đăng nhập lại
         unset($_SESSION['mfa_user_id'], $_SESSION['mfa_code'], $_SESSION['mfa_expires']);
     } elseif ($code !== $_SESSION['mfa_code']) {
-        $error = 'Mã OTP không đúng. Vui lòng kiểm tra email của bạn.';
+        if (!isset($_SESSION['mfa_failures'])) $_SESSION['mfa_failures'] = 0;
+        $_SESSION['mfa_failures']++;
+        if ($_SESSION['mfa_failures'] >= 5) {
+            $_SESSION['mfa_lockout'] = time() + 120;
+            $error = 'Bạn đã nhập sai quá 5 lần. Vui lòng chờ 2 phút để thử lại.';
+        } else {
+            $error = 'Mã OTP không đúng. Vui lòng kiểm tra email của bạn.';
+        }
     } else {
         // Xác thực thành công
+        session_regenerate_id(true);
         $_SESSION['loggedin'] = true;
         $stmt = $pdo->prepare('SELECT username FROM users WHERE id = :id');
         $stmt->execute(['id' => $_SESSION['mfa_user_id']]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($user) {
             $_SESSION['username'] = $user['username'];
+            $_SESSION['user_id'] = $_SESSION['mfa_user_id'];
         }
         // Dọn dẹp session MFA
-        unset($_SESSION['mfa_user_id'], $_SESSION['mfa_code'], $_SESSION['mfa_expires']);
+        unset($_SESSION['mfa_user_id'], $_SESSION['mfa_code'], $_SESSION['mfa_expires'], $_SESSION['mfa_failures'], $_SESSION['mfa_lockout']);
         header('Location: donelogin.php');
         exit;
     }
@@ -46,23 +57,34 @@ if (isset($_GET['resend']) && isset($_SESSION['mfa_user_id'])) {
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($user) {
-        $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $_SESSION['mfa_code']    = $otp;
-        $_SESSION['mfa_expires'] = date('Y-m-d H:i:s', time() + 300);
+        // Kiểm tra Rate Limit trước khi cho phép gửi lại OTP
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM otp_attempts WHERE identifier = :email AND attempt_time > DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
+        $stmt->execute(['email' => $user['email']]);
+        if ($stmt->fetchColumn() >= 3) {
+            $error = 'Bạn đã yêu cầu gửi lại OTP quá nhiều lần. Vui lòng thử lại sau 2 phút.';
+        } else {
+            // Ghi nhận lần yêu cầu OTP
+            $stmt = $pdo->prepare("INSERT INTO otp_attempts (identifier) VALUES (:email)");
+            $stmt->execute(['email' => $user['email']]);
 
-        $emailBody = "
-            <div style='font-family:Roboto,sans-serif;max-width:480px;margin:auto;background:#1a1a1a;color:#fff;border-radius:10px;padding:32px;'>
-                <h2 style='color:#b196b6;margin-top:0'>Xác thực đăng nhập picoCTF</h2>
-                <p>Xin chào <strong>" . htmlspecialchars($user['username']) . "</strong>,</p>
-                <p>Mã OTP mới của bạn:</p>
-                <div style='font-size:2.5rem;font-weight:700;letter-spacing:12px;color:#5d68eb;text-align:center;padding:20px 0'>$otp</div>
-                <p style='color:#888;font-size:0.85rem'>Mã có hiệu lực trong <strong>5 phút</strong>.</p>
-            </div>";
+            $otp = generateStrongOTP();
+            $_SESSION['mfa_code']    = $otp;
+            $_SESSION['mfa_expires'] = date('Y-m-d H:i:s', time() + 300);
 
-        sendMail($user['email'], 'Mã xác thực mới - picoCTF', $emailBody);
+            $emailBody = "
+                <div style='font-family:Roboto,sans-serif;max-width:480px;margin:auto;background:#1a1a1a;color:#fff;border-radius:10px;padding:32px;'>
+                    <h2 style='color:#b196b6;margin-top:0'>Xác thực đăng nhập picoCTF</h2>
+                    <p>Xin chào <strong>" . htmlspecialchars($user['username']) . "</strong>,</p>
+                    <p>Mã OTP mới của bạn:</p>
+                    <div style='font-size:2.5rem;font-weight:700;letter-spacing:12px;color:#5d68eb;text-align:center;padding:20px 0'>$otp</div>
+                    <p style='color:#888;font-size:0.85rem'>Mã có hiệu lực trong <strong>5 phút</strong>.</p>
+                </div>";
+
+            sendMail($user['email'], 'Mã xác thực mới - picoCTF', $emailBody);
+            header('Location: mfa.php?sent=1');
+            exit;
+        }
     }
-    header('Location: mfa.php?sent=1');
-    exit;
 }
 
 $sent = isset($_GET['sent']);
@@ -158,7 +180,7 @@ $sent = isset($_GET['sent']);
 
             <p class="otp-description">
                 Mã OTP đã được gửi đến email của bạn.<br>
-                Vui lòng nhập mã 6 chữ số để tiếp tục.
+                Vui lòng nhập mã 8 chữ số để tiếp tục.
             </p>
 
             <?php if ($error): ?>
@@ -172,10 +194,9 @@ $sent = isset($_GET['sent']);
             <form class="login-form" method="POST" action="mfa.php">
                 <div class="input-group">
                     <i class="fas fa-key input-icon"></i>
-                    <input type="text" name="otp" placeholder="_ _ _ _ _ _"
+                    <input type="text" name="otp" placeholder="_ _ _ _ _ _ _ _"
                            class="form-control otp-input"
-                           maxlength="6" pattern="\d{6}"
-                           inputmode="numeric"
+                           maxlength="8"
                            autocomplete="one-time-code"
                            autofocus required>
                 </div>
@@ -194,10 +215,7 @@ $sent = isset($_GET['sent']);
     </main>
 
     <script>
-        // Chỉ cho phép nhập số vào ô OTP
-        document.querySelector('input[name="otp"]').addEventListener('input', function () {
-            this.value = this.value.replace(/\D/g, '').slice(0, 6);
-        });
+        // JS helper if you want to force uppercase or similar (removed numeric restriction)
     </script>
 </body>
 </html>

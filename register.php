@@ -43,18 +43,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") { // Kiểm tra sự kiện người d
     } elseif (!preg_match('/[A-Z]/', $password) || !preg_match('/[a-z]/', $password) || !preg_match('/[0-9]/', $password) || !preg_match('/[@!#%^&*()_+-=$]/', $password)) {
         $error = "Mật khẩu phải bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (@!#%^&*()_+-=$)!";
     } else {
-        // Kiểm tra xem user hoặc email này đã tồn tại chưa
-        $stmt = $pdo->prepare("SELECT id, username, email FROM users WHERE username = :username OR email = :email");
+        $stmt = $pdo->prepare("SELECT id, username, email FROM users WHERE BINARY username = :username OR email = :email");
         $stmt->execute(['username' => $username, 'email' => $email]);
-        $existingUser = $stmt->fetch();
+        $existingUsers = $stmt->fetchAll();
 
-        if ($existingUser) {
-            if ($existingUser['username'] === $username) {
-                $error = "Tên tài khoản này đã có người sử dụng!";
-            } else {
-                $error = "Email này đã được sử dụng!";
+        if ($existingUsers) {
+            foreach ($existingUsers as $eu) {
+                if ($eu['username'] === $username) {
+                    $error = "Tên tài khoản này đã có người sử dụng!";
+                    break;
+                }
+                if (strcasecmp($eu['email'], $email) === 0) {
+                    $error = "Một tài khoản email chỉ đăng ký được một tài khoản!";
+                    break;
+                }
             }
-        } else {
+            if (empty($error)) {
+                $error = "Thông tin tài khoản hoặc email đã tồn tại!";
+            }
+        } 
+        
+        if (empty($error)) {
             // INSERT dữ liệu an toàn bằng BCRYPT
             $stmt = $pdo->prepare("INSERT INTO users (username, email, password_hash, full_name) VALUES (:username, :email, :password, :full_name)");
             $stmt->execute([
@@ -143,16 +152,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") { // Kiểm tra sự kiện người d
                 <span class="logo-text">picoCTF</span>
             </div>
         </div>
-        <div class="nav-menu">
-            <ul class="nav-links">
-                <li><a href="#">Learn <i class="fas fa-caret-down" style="font-size: 0.8em; margin-left: 4px;"></i></a>
-                </li>
-                <li><a href="#">Practice</a></li>
-                <li><a href="#">Compete</a></li>
-                <li><a href="#">Classrooms</a></li>
-                <li><a href="login.php">Log In</a></li> <!-- Trở lại login -->
-            </ul>
-        </div>
+
     </nav>
 
     <main class="main-content">
@@ -208,7 +208,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") { // Kiểm tra sự kiện người d
 
                     <div class="input-group">
                         <i class="fas fa-lock input-icon"></i>
-                        <input type="password" name="password" placeholder="Mật Khẩu" class="form-control" required>
+                        <input type="password" name="password" id="reg_password" placeholder="Mật Khẩu" class="form-control" required onkeyup="checkPassword(this.value)">
+                    </div>
+                    
+                    <div id="password_constraints" style="margin-bottom: 15px; font-size: 0.85em; text-align: left; padding-left: 5px; display: none;">
+                        <div id="cond_length" style="color: #b2182b; margin-bottom: 4px;"><i class="fas fa-times" style="margin-right: 5px;"></i>Ít nhất 8 ký tự</div>
+                        <div id="cond_upper" style="color: #b2182b; margin-bottom: 4px;"><i class="fas fa-times" style="margin-right: 5px;"></i>Phải có chữ in hoa</div>
+                        <div id="cond_lower" style="color: #b2182b; margin-bottom: 4px;"><i class="fas fa-times" style="margin-right: 5px;"></i>Phải có chữ thường</div>
+                        <div id="cond_number" style="color: #b2182b; margin-bottom: 4px;"><i class="fas fa-times" style="margin-right: 5px;"></i>Phải có số</div>
+                        <div id="cond_special" style="color: #b2182b; margin-bottom: 4px;"><i class="fas fa-times" style="margin-right: 5px;"></i>Phải có kí tự đặc biệt</div>
                     </div>
 
                     <div class="input-group">
@@ -233,6 +241,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") { // Kiểm tra sự kiện người d
         </div>
     </main>
 
+    <script>
+        document.getElementById('reg_password').addEventListener('focus', function() {
+            document.getElementById('password_constraints').style.display = 'block';
+        });
+
+        function checkPassword(pwd) {
+            const rules = [
+                { id: 'cond_length', regex: /.{8,}/ },
+                { id: 'cond_upper', regex: /[A-Z]/ },
+                { id: 'cond_lower', regex: /[a-z]/ },
+                { id: 'cond_number', regex: /[0-9]/ },
+                { id: 'cond_special', regex: /[@!#%^&*()_+\-=$]/ }
+            ];
+
+            rules.forEach(rule => {
+                const element = document.getElementById(rule.id);
+                if (rule.regex.test(pwd)) {
+                    element.style.color = '#28a745';
+                    element.innerHTML = '<i class="fas fa-check" style="margin-right: 5px;"></i>' + element.innerText.trim();
+                } else {
+                    element.style.color = '#b2182b';
+                    element.innerHTML = '<i class="fas fa-times" style="margin-right: 5px;"></i>' + element.innerText.trim();
+                }
+            });
+        }
+    </script>
 </body>
 
 </html>

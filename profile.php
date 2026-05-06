@@ -32,7 +32,9 @@ if (!$user) {
 // ==============================
 // Xử lý cập nhật thông tin cá nhân
 // ==============================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_info') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && isset($_SERVER['CONTENT_LENGTH']) && (int)$_SERVER['CONTENT_LENGTH'] > 0) {
+    $error = 'Dung lượng tải lên vuợt quá giới hạn hệ thống. Vui lòng chọn tệp tin dưới 20MB.';
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_info') {
     // CSRF check
     if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
         die('Yêu cầu không hợp lệ (CSRF).');
@@ -55,26 +57,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     // Xử lý upload Avatar
     $avatar_name = $user['avatar'];
     if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] == 0 && empty($error)) {
-        $allowed  = ['jpg', 'jpeg', 'png', 'gif'];
+        $allowed_ext  = ['jpg', 'jpeg', 'png', 'gif'];
+        $allowed_mime = ['image/jpeg', 'image/png', 'image/gif'];
         $ext      = strtolower(pathinfo($_FILES['avatar']['name'], PATHINFO_EXTENSION));
+        
+        // Kiểm tra nội dung thực sự của file (MIME Type) để tránh giả mạo đuôi file
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = finfo_file($finfo, $_FILES['avatar']['tmp_name']);
+        finfo_close($finfo);
 
-        if (!in_array($ext, $allowed)) {
-            $error = 'Chỉ chấp nhận file ảnh (JPG, PNG, GIF).';
-        } elseif ($_FILES['avatar']['size'] > 2 * 1024 * 1024) {
-            $error = 'Dung lượng ảnh không được vượt quá 2MB.';
+        if (!in_array($ext, $allowed_ext) || !in_array($mime, $allowed_mime)) {
+            $error = 'Tệp không hợp lệ. Chỉ chấp nhận file ảnh chuẩn (JPG, PNG, GIF).';
+        } elseif ($_FILES['avatar']['size'] > 20 * 1024 * 1024) {
+            $error = 'Dung lượng ảnh không được vượt quá 20MB.';
         } else {
-            $avatar_name = 'avatar_' . $user['id'] . '_' . time() . '.' . $ext;
-            $upload_path = 'uploads/avatars/' . $avatar_name;
-            if (!is_dir('uploads/avatars')) {
-                mkdir('uploads/avatars', 0755, true);
+            // GD Re-rendering để chống lỗi Polyglot Image
+            $tmp_name = $_FILES['avatar']['tmp_name'];
+            $image = null;
+            switch ($mime) {
+                case 'image/jpeg': $image = @imagecreatefromjpeg($tmp_name); break;
+                case 'image/png':  $image = @imagecreatefrompng($tmp_name); break;
+                case 'image/gif':  $image = @imagecreatefromgif($tmp_name); break;
             }
-            if (move_uploaded_file($_FILES['avatar']['tmp_name'], $upload_path)) {
-                if ($user['avatar'] !== 'default_avatar.png' && file_exists('uploads/avatars/' . $user['avatar'])) {
-                    unlink('uploads/avatars/' . $user['avatar']);
-                }
+            
+            if (!$image) {
+                $error = 'File ảnh bị lỗi hoặc chứa dữ liệu không hợp lệ.';
             } else {
-                $error = 'Lỗi khi tải ảnh lên.';
-                $avatar_name = $user['avatar'];
+                $avatar_name = 'avatar_' . $user['id'] . '_' . time() . '.' . $ext;
+                $upload_path = 'uploads/avatars/' . $avatar_name;
+                if (!is_dir('uploads/avatars')) {
+                    mkdir('uploads/avatars', 0755, true);
+                }
+                
+                // Lưu lại ảnh mới đã được làm sạch
+                $saved = false;
+                switch ($mime) {
+                    case 'image/jpeg': $saved = imagejpeg($image, $upload_path, 90); break;
+                    case 'image/png':  $saved = imagepng($image, $upload_path); break;
+                    case 'image/gif':  $saved = imagegif($image, $upload_path); break;
+                }
+                imagedestroy($image);
+                
+                if ($saved) {
+                    if ($user['avatar'] !== 'default_avatar.png' && file_exists('uploads/avatars/' . $user['avatar'])) {
+                        unlink('uploads/avatars/' . $user['avatar']);
+                    }
+                } else {
+                    $error = 'Lỗi khi xử lý và lưu ảnh.';
+                    $avatar_name = $user['avatar'];
+                }
             }
         }
     }
@@ -138,8 +169,8 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'c
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>picoCTF - Thông tin cá nhân</title>
     <meta name="description" content="Quản lý thông tin cá nhân và mật khẩu tài khoản picoCTF.">
-    <link rel="stylesheet" href="stylelogin.css">
-    <link rel="stylesheet" href="styleprofile.css">
+    <link rel="stylesheet" href="stylelogin.css?v=<?= time() ?>">
+    <link rel="stylesheet" href="styleprofile.css?v=<?= time() ?>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -183,7 +214,8 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'c
         </div>
         <div class="nav-menu">
             <ul class="nav-links">
-                <li><a href="donelogin.php">Classrooms</a></li>
+                <li><a href="donelogin.php">CTF Main</a></li>
+                <li><a href="dashboard.php">CTF Dashboard</a></li>
                 <li><a href="#" class="active">Profile</a></li>
                 <li><a href="logout.php" style="color: #ff6b6b;"><i class="fas fa-sign-out-alt"></i> Thoát</a></li>
             </ul>
@@ -242,7 +274,7 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'c
                     </div>
 
                     <button type="submit" class="btn-save">Lưu thay đổi</button>
-                    <a href="donelogin.php" class="btn-back">Quay lại Dashboard</a>
+                    <a href="dashboard.php" class="btn-back">Quay lại CTF Dashboard</a>
                 </form>
 
                 <!-- Divider -->
@@ -311,6 +343,11 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'c
         document.getElementById('avatarInput').addEventListener('change', function () {
             const [file] = this.files;
             if (file) {
+                if (file.size > 20 * 1024 * 1024) {
+                    alert('Dung lượng ảnh vượt quá 20MB. Vui lòng chọn ảnh khác!');
+                    this.value = ''; // Reset input
+                    return;
+                }
                 document.getElementById('avatarImg').src = URL.createObjectURL(file);
             }
         });

@@ -9,14 +9,22 @@ CREATE TABLE IF NOT EXISTS users (
     full_name VARCHAR(100),
     phone VARCHAR(20),
     avatar VARCHAR(255) DEFAULT 'default_avatar.png',
+    role ENUM('normal user', 'admin') DEFAULT 'normal user',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS login_attempts (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    ip_address VARCHAR(45) NOT NULL,
+    username VARCHAR(50) NOT NULL,
     attempt_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    KEY (ip_address)
+    KEY (username)
+);
+
+CREATE TABLE IF NOT EXISTS otp_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    identifier VARCHAR(100) NOT NULL,
+    attempt_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    KEY (identifier)
 );
 
 -- Mật khẩu mặc định 'Admin@123' đã được băm bằng BCRYPT thay vì MD5

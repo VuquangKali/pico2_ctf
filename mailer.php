@@ -23,16 +23,16 @@ function sendMail(string $to, string $subject, string $body): bool
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';     // Máy chủ SMTP của Gmail
         $mail->SMTPAuth = true;                 // Bật xác thực SMTP
-        $mail->Username = 'vuquang30102003@gmail.com'; // Thay bằng địa chỉ email của bạn
-        $mail->Password = 'vdfjtccleauiocxg';    // Mật khẩu ứng dụng (App Password) của Gmail
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS; // Khuyên dùng STARTTLS ở port 587 hoặc SMTPS ở port 465
+        $mail->Username = $_ENV['SMTP_USER'] ?? ''; 
+        $mail->Password = $_ENV['SMTP_PASS'] ?? '';    // Mật khẩu ứng dụng (App Password) của Gmail
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS; 
         $mail->Port = 587;                  // Port kết nối SMTP
 
         // Cấu hình ngôn ngữ UTF-8 để không bị lỗi font tiếng Việt
         $mail->CharSet = 'UTF-8';
 
         // Người gửi & Người nhận
-        $mail->setFrom('vuquang30102003@gmail.com', 'picoCTF Support'); // Thay bằng email hệ thống của bạn
+        $mail->setFrom('vuquang30102003@gmail.com', 'picoCTF Support'); 
         $mail->addAddress($to);
 
         // Nội dung Email
@@ -46,5 +46,29 @@ function sendMail(string $to, string $subject, string $body): bool
         error_log('Lỗi gửi email thực tế: ' . $e->getMessage());
         return false;
     }
+}
+
+/**
+ * Generate a strong OTP containing letters, numbers, and symbols
+ */
+function generateStrongOTP(): string
+{
+    $upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    $lower = "abcdefghijklmnopqrstuvwxyz";
+    $numbers = "0123456789";
+    $special = "@!#%^&*()_+-=$";
+
+    $otp = '';
+    $otp .= $upper[random_int(0, strlen($upper) - 1)];
+    $otp .= $lower[random_int(0, strlen($lower) - 1)];
+    $otp .= $numbers[random_int(0, strlen($numbers) - 1)];
+    $otp .= $special[random_int(0, strlen($special) - 1)];
+
+    $all = $upper . $lower . $numbers . $special;
+    for ($i = 0; $i < 4; $i++) {
+        $otp .= $all[random_int(0, strlen($all) - 1)];
+    }
+    
+    return str_shuffle($otp);
 }
 ?>

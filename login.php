@@ -14,57 +14,75 @@ $error = '';
 $success = '';
 $username = '';
 
-// Check rate limit
-$ip_address = $_SERVER['REMOTE_ADDR'];
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM login_attempts WHERE ip_address = :ip AND attempt_time > DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
-$stmt->execute(['ip' => $ip_address]);
-if ($stmt->fetchColumn() > 5) {
-    $error = "Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau 2 phút.";
-}
-
 // Xử lý Form 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && empty($error)) {
     $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
-
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE username = :username");
+    
+    // Check rate limit by username
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM login_attempts WHERE username = :username AND attempt_time > DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
     $stmt->execute(['username' => $username]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($stmt->fetchColumn() > 5) {
+        $error = "Tài khoản này đã bị nhập sai quá nhiều lần. Vui lòng thử lại sau 2 phút.";
+    }
 
-    if ($user && password_verify($password, $user['password_hash'])) {
-        // Đăng nhập thành công — bắt đầu luồng MFA
-        // Xóa lịch sử đăng nhập sai của IP này
-        $stmt = $pdo->prepare("DELETE FROM login_attempts WHERE ip_address = :ip");
-        $stmt->execute(['ip' => $ip_address]);
+    if (empty($error)) {
+        $password = $_POST['password'] ?? '';
 
-        // Sinh OTP 6 chữ số và lưu vào session tạm
-        $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $_SESSION['mfa_user_id'] = $user['id'];
-        $_SESSION['mfa_code'] = $otp;
-        $_SESSION['mfa_expires'] = date('Y-m-d H:i:s', time() + 300); // Hết hạn sau 5 phút
+        // Binary check for case-insensitive collation, forces exact case match for username
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE BINARY username = :username");
+        $stmt->execute(['username' => $username]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        // Gửi OTP tới email của user
-        $emailBody = "
-            <div style='font-family:Roboto,sans-serif;max-width:480px;margin:auto;background:#1a1a1a;color:#fff;border-radius:10px;padding:32px;'>
-                <h2 style='color:#b196b6;margin-top:0'>Xác thực đăng nhập picoCTF cho con vợ <strong>" . htmlspecialchars($user['username']) . "</strong>,</h2>
-                <p>Xin chào <strong>" . htmlspecialchars($user['username']) . "</strong>,</p>
-                <p>Mã OTP của bạn là:</p>
-                <div style='font-size:2.5rem;font-weight:700;letter-spacing:12px;color:#5d68eb;text-align:center;padding:20px 0'>$otp</div>
-                <p style='color:#888;font-size:0.85rem'>Mã có hiệu lực trong <strong>5 phút</strong>. Không chia sẻ mã này cho bất kỳ ai.</p>
-            </div>";
+        if ($user && password_verify($password, $user['password_hash'])) {
+            $email = $user['email'];
+            
+            // Check OTP Request Rate Limit even if login is successful
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM otp_attempts WHERE identifier = :email AND attempt_time > DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
+            $stmt->execute(['email' => $email]);
+            if ($stmt->fetchColumn() >= 3) {
+                // Return an error and don't proceed to MFA
+                $error = "Bạn đã yêu cầu gửi OTP đăng nhập quá nhiều lần. Vui lòng thử lại sau 2 phút.";
+            } else {
+                // Log the OTP attempt
+                $stmt = $pdo->prepare("INSERT INTO otp_attempts (identifier) VALUES (:email)");
+                $stmt->execute(['email' => $email]);
 
-        if (!sendMail($user['email'], 'Mã xác thực đăng nhập picoCTF', $emailBody)) {
-            $error = 'Không thể gửi email OTP. Vui lòng thử lại.';
+                // Xóa lịch sử đăng nhập sai của tài khoản này
+                $stmt = $pdo->prepare("DELETE FROM login_attempts WHERE username = :username");
+                $stmt->execute(['username' => $username]);
+
+                // Sinh OTP 8 ký tự và lưu vào session tạm
+                $otp = generateStrongOTP();
+                $_SESSION['mfa_user_id'] = $user['id'];
+                $_SESSION['mfa_code'] = $otp;
+                $_SESSION['mfa_expires'] = date('Y-m-d H:i:s', time() + 300); // Hết hạn sau 5 phút
+
+            // Gửi OTP tới email của user
+            $emailBody = "
+                <div style='font-family:Roboto,sans-serif;max-width:480px;margin:auto;background:#1a1a1a;color:#fff;border-radius:10px;padding:32px;'>
+                    <h2 style='color:#b196b6;margin-top:0'>Xác thực đăng nhập picoCTF cho con vợ <strong>" . htmlspecialchars($user['username']) . "</strong>,</h2>
+                    <p>Xin chào <strong>" . htmlspecialchars($user['username']) . "</strong>,</p>
+                    <p>Mã OTP của bạn là:</p>
+                    <div style='font-size:2.5rem;font-weight:700;letter-spacing:12px;color:#5d68eb;text-align:center;padding:20px 0'>$otp</div>
+                    <p style='color:#888;font-size:0.85rem'>Mã có hiệu lực trong <strong>5 phút</strong>. Không chia sẻ mã này cho bất kỳ ai.</p>
+                </div>";
+
+            if (!sendMail($user['email'], 'Mã xác thực đăng nhập picoCTF', $emailBody)) {
+                $error = 'Không thể gửi email OTP. Vui lòng thử lại.';
+            } else {
+                header('Location: mfa.php');
+                exit;
+            }
+            }
         } else {
-            header('Location: mfa.php');
-            exit;
-        }
-    } else {
-        // Log failed attempt
-        $stmt = $pdo->prepare("INSERT INTO login_attempts (ip_address) VALUES (:ip)");
-        $stmt->execute(['ip' => $ip_address]);
+            // Log failed attempt by username
+            if (!empty($username)) {
+                $stmt = $pdo->prepare("INSERT INTO login_attempts (username) VALUES (:username)");
+                $stmt->execute(['username' => $username]);
+            }
 
-        $error = "Tài khoản hoặc Mật khẩu không chính xác!";
+            $error = "Tài khoản hoặc Mật khẩu không chính xác!";
+        }
     }
 }
 ?>
@@ -121,16 +139,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && empty($error)) {
             </div>
         </div>
 
-        <div class="nav-menu">
-            <ul class="nav-links">
-                <li><a href="#">Learn <i class="fas fa-caret-down" style="font-size: 0.8em; margin-left: 4px;"></i></a>
-                </li>
-                <li><a href="#">Practice</a></li>
-                <li><a href="#">Compete</a></li>
-                <li><a href="#">Classrooms</a></li>
-                <li><a href="#" class="active">Log In</a></li>
-            </ul>
-        </div>
+
     </nav>
 
     <!-- Nội dung chính (Form Đăng nhập) -->

@@ -3,7 +3,7 @@
     --pico-red: #b2182b;
     --pico-dark: #1e1e1e;
     --pico-text: #ffffff;
-    --pico-bg: #0d0d0d;
+    --pico-bg: #ffffff;
 }
 
 body {
@@ -20,13 +20,13 @@ body {
 }
 
 .profile-card {
-    background-color: #1a1a1a;
+    background-color: #ffffff;
     border-radius: 12px;
     width: 100%;
     max-width: 500px;
     padding: 30px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    border: 1px solid #333;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    border: 1px solid #ddd;
 }
 
 .card-header h2 {
@@ -50,7 +50,7 @@ body {
     border-radius: 50%;
     border: 3px solid var(--pico-purple);
     padding: 5px;
-    background: #252525;
+    background: #f0f0f0;
 }
 
 .avatar-preview img {
@@ -72,7 +72,7 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border: 2px solid #1a1a1a;
+    border: 2px solid #ffffff;
     transition: transform 0.2s;
 }
 
@@ -93,8 +93,9 @@ body {
 .form-group label {
     display: block;
     margin-bottom: 8px;
-    color: #ccc;
+    color: #333;
     font-size: 0.9rem;
+    font-weight: 500;
 }
 
 .form-group label i {
@@ -105,10 +106,10 @@ body {
 .form-control {
     width: 100%;
     padding: 12px;
-    background: #252525;
-    border: 1px solid #333;
+    background: #ffffff;
+    border: 1px solid #ccc;
     border-radius: 6px;
-    color: #fff;
+    color: #333;
     box-sizing: border-box;
     font-size: 1rem;
     transition: border-color 0.3s;
@@ -141,13 +142,13 @@ body {
     display: block;
     text-align: center;
     margin-top: 15px;
-    color: #888;
+    color: #555;
     text-decoration: none;
     font-size: 0.9rem;
 }
 
 .btn-back:hover {
-    color: #fff;
+    color: #000;
 }
 
 .alert {
